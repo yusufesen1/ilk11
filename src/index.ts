@@ -4,7 +4,6 @@ import { Pool } from "pg";
 const app = express();
 app.use(express.json());
 
-// Docker'daki veritabanına bağlantı
 const pool = new Pool({
   host: "localhost",
   port: 5433,
@@ -13,7 +12,26 @@ const pool = new Pool({
   database: "ilk11",
 });
 
-// Örnek: /matches/nearby?lat=38.4370&lng=27.1430&radius=5000
+// --- Yardımcı fonksiyon: bir maçın yakınındaki kullanıcılar ---
+async function findNearbyUsers(matchId: number, radius = 3000) {
+  const { rows } = await pool.query(
+    `SELECT u.id, u.name,
+            round(ST_Distance(u.location, m.location))::int AS distance_m
+     FROM users u
+     JOIN matches m ON m.id = $1
+     WHERE ST_DWithin(u.location, m.location, $2::float8)
+     ORDER BY distance_m`,
+    [matchId, radius]
+  );
+  return rows;
+}
+
+// --- Health check ---
+app.get("/", (req, res) => {
+  res.json({ app: "ilk11-api", status: "ok" });
+});
+
+// --- Bir konumun yakınındaki maçlar ---
 app.get("/matches/nearby", async (req, res) => {
   const lat = Number(req.query.lat);
   const lng = Number(req.query.lng);
@@ -36,6 +54,14 @@ app.get("/matches/nearby", async (req, res) => {
   res.json(rows);
 });
 
+// --- Bir maçın yakınındaki kullanıcılar ---
+app.get("/matches/:id/nearby-users", async (req, res) => {
+  const matchId = Number(req.params.id);
+  const radius = Number(req.query.radius ?? 3000);
+  res.json(await findNearbyUsers(matchId, radius));
+});
+
+// --- Maç oluştur + yakındakilere "bildirim" ---
 app.post("/matches", async (req, res) => {
   const { title, pitch_name, lat, lng, starts_at, missing_players } = req.body ?? {};
 
@@ -50,42 +76,14 @@ app.post("/matches", async (req, res) => {
      RETURNING id, title, pitch_name, starts_at, missing_players`,
     [title, pitch_name, lat, lng, starts_at, missing_players]
   );
+  const match = rows[0];
 
-    const match = rows[0];
-
-  const { rows: notifiedUsers } = await pool.query(
-    `SELECT u.id, u.name,
-            round(ST_Distance(u.location, m.location))::int AS distance_m
-     FROM users u
-     JOIN matches m ON m.id = $1
-     WHERE ST_DWithin(u.location, m.location, 3000)
-     ORDER BY distance_m`,
-    [match.id]
-  );
-
+  const notifiedUsers = await findNearbyUsers(match.id);
   for (const u of notifiedUsers) {
     console.log(`🔔 ${u.name} (${u.distance_m} m): "${match.title}" maçında ${match.missing_players} kişi eksik!`);
   }
 
   res.status(201).json({ match, notified: notifiedUsers });
-});
-
-// Örnek: /matches/6/nearby-users?radius=3000
-app.get("/matches/:id/nearby-users", async (req, res) => {
-  const matchId = Number(req.params.id);
-  const radius = Number(req.query.radius ?? 3000);
-
-  const { rows } = await pool.query(
-    `SELECT u.id, u.name,
-            round(ST_Distance(u.location, m.location))::int AS distance_m
-     FROM users u
-     JOIN matches m ON m.id = $1
-     WHERE ST_DWithin(u.location, m.location, $2::float8)
-     ORDER BY distance_m`,
-    [matchId, radius]
-  );
-
-  res.json(rows);
 });
 
 app.listen(3000, () => {
