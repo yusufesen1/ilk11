@@ -18,6 +18,7 @@
   },
   "homepage": "https://github.com/yusufesen1/ilk11#readme",
   "dependencies": {
+    "dotenv": "^18.0.8",
     "express": "^5.3.0",
     "pg": "^8.23.1"
   },

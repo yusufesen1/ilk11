@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import { Pool } from "pg";
 
@@ -5,11 +6,7 @@ const app = express();
 app.use(express.json());
 
 const pool = new Pool({
-  host: "localhost",
-  port: 5433,
-  user: "ilk11",
-  password: "ilk11",
-  database: "ilk11",
+  connectionString: process.env.DATABASE_URL,
 });
 
 // --- Yardımcı fonksiyon: bir maçın yakınındaki kullanıcılar ---
@@ -86,6 +83,8 @@ app.post("/matches", async (req, res) => {
   res.status(201).json({ match, notified: notifiedUsers });
 });
 
-app.listen(3000, () => {
-  console.log("ilk11-api çalışıyor: http://localhost:3000");
+const port = Number(process.env.PORT ?? 3000);
+
+app.listen(port, () => {
+  console.log(`ilk11-api çalışıyor: http://localhost:${port}`);
 });
