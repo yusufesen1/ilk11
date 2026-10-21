@@ -2,6 +2,7 @@ import express from "express";
 import { Pool } from "pg";
 
 const app = express();
+app.use(express.json());
 
 // Docker'daki veritabanına bağlantı
 const pool = new Pool({
@@ -33,6 +34,24 @@ app.get("/matches/nearby", async (req, res) => {
   );
 
   res.json(rows);
+});
+
+app.post("/matches", async (req, res) => {
+  const { title, pitch_name, lat, lng, starts_at, missing_players } = req.body ?? {};
+
+  if (!title || !pitch_name || lat === undefined || lng === undefined || !starts_at || !missing_players) {
+    res.status(400).json({ error: "eksik alan var" });
+    return;
+  }
+
+  const { rows } = await pool.query(
+    `INSERT INTO matches (title, pitch_name, location, starts_at, missing_players)
+     VALUES ($1, $2, ST_SetSRID(ST_MakePoint($4::float8, $3::float8), 4326)::geography, $5, $6)
+     RETURNING id, title, pitch_name, starts_at, missing_players`,
+    [title, pitch_name, lat, lng, starts_at, missing_players]
+  );
+
+  res.status(201).json(rows[0]);
 });
 
 app.listen(3000, () => {
