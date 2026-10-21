@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: ilk11-db
+    environment:
+      POSTGRES_USER: ilk11
+      POSTGRES_PASSWORD: ilk11
+      POSTGRES_DB: ilk11
+    ports:
+      - "5432:5432"
+    volumes:
+      - ilk11-data:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+volumes:
+  ilk11-data:
