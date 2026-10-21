@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ilk11 Harita</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+    #map { height: 100%; }
+    #panel {
+      position: absolute; top: 12px; right: 12px; z-index: 1000;
+      background: #fff; padding: 12px 14px; border-radius: 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,.2); font-size: 14px; width: 220px;
+    }
+    #panel h3 { margin: 0 0 6px; }
+    #panel input { width: 100%; }
+    .popup button {
+      margin-top: 6px; padding: 4px 8px; border: 0; border-radius: 6px;
+      background: #16a34a; color: #fff; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="panel">
+    <h3>⚽ ilk11</h3>
+    Haritaya tıkla, yakındaki maçları gör.<br><br>
+    Yarıçap: <b><span id="radiusValue">3000</span> m</b>
+    <input id="radius" type="range" min="500" max="10000" step="500" value="3000">
+    <div id="info"></div>
+  </div>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    // Harita: İzmir merkezli
+    const map = L.map("map").setView([38.43, 27.15], 12);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap"
+    }).addTo(map);
+
+    const searchLayer = L.layerGroup().addTo(map); // arama dairesi + maçlar
+    const userLayer = L.layerGroup().addTo(map);   // bildirim alacak kullanıcılar
+
+    const radiusInput = document.getElementById("radius");
+    const info = document.getElementById("info");
+    radiusInput.oninput = () => {
+      document.getElementById("radiusValue").textContent = radiusInput.value;
+    };
+
+    // 1) Haritaya tıklayınca: o noktanın yakınındaki maçlar
+    map.on("click", async (e) => {
+      const { lat, lng } = e.latlng;
+      const radius = Number(radiusInput.value);
+
+      searchLayer.clearLayers();
+      userLayer.clearLayers();
+
+      L.circle([lat, lng], { radius, color: "#2563eb", fillOpacity: 0.08 }).addTo(searchLayer);
+      L.circleMarker([lat, lng], { radius: 5, color: "#2563eb" }).addTo(searchLayer);
+
+      const res = await fetch(`/matches/nearby?lat=${lat}&lng=${lng}&radius=${radius}`);
+      const matches = await res.json();
+
+      info.innerHTML = `<br><b>${matches.length}</b> maç bulundu`;
+
+      for (const m of matches) {
+        L.marker([m.lat, m.lng])
+          .bindPopup(`
+            <div class="popup">
+              <b>${m.title}</b><br>
+              ${m.pitch_name}<br>
+              ${m.missing_players} kişi eksik · ${m.distance_m} m uzakta<br>
+              <button onclick="showUsers(${m.id}, ${m.lat}, ${m.lng})">Kimlere bildirim gider?</button>
+            </div>
+          `)
+          .addTo(searchLayer);
+      }
+    });
+
+    // 2) Bir maçın 3 km yakınındaki kullanıcılar
+    async function showUsers(matchId, lat, lng) {
+      userLayer.clearLayers();
+
+      L.circle([lat, lng], {
+        radius: 3000, color: "#16a34a", dashArray: "6 6", fillOpacity: 0.05
+      }).addTo(userLayer);
+
+      const res = await fetch(`/matches/${matchId}/nearby-users`);
+      const users = await res.json();
+
+      for (const u of users) {
+        L.circleMarker([u.lat, u.lng], { radius: 8, color: "#16a34a", fillOpacity: 0.8 })
+          .bindTooltip(`🔔 ${u.name} · ${u.distance_m} m`, { permanent: true, direction: "right" })
+          .addTo(userLayer);
+      }
+
+      info.innerHTML += `<br><b>${users.length}</b> kişiye bildirim gider`;
+    }
+  </script>
+</body>
+</html>

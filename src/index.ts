@@ -4,6 +4,7 @@ import { Pool } from "pg";
 
 const app = express();
 app.use(express.json());
+app.use(express.static("public"));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -13,6 +14,8 @@ const pool = new Pool({
 async function findNearbyUsers(matchId: number, radius = 3000) {
   const { rows } = await pool.query(
     `SELECT u.id, u.name,
+            ST_Y(u.location::geometry) AS lat,
+            ST_X(u.location::geometry) AS lng,
             round(ST_Distance(u.location, m.location))::int AS distance_m
      FROM users u
      JOIN matches m ON m.id = $1
@@ -41,6 +44,8 @@ app.get("/matches/nearby", async (req, res) => {
 
   const { rows } = await pool.query(
     `SELECT id, title, pitch_name, starts_at, missing_players,
+            ST_Y(location::geometry) AS lat,
+            ST_X(location::geometry) AS lng,
             round(ST_Distance(location, ST_MakePoint($2::float8, $1::float8)::geography))::int AS distance_m
      FROM matches
      WHERE ST_DWithin(location, ST_MakePoint($2::float8, $1::float8)::geography, $3::float8)
@@ -83,6 +88,7 @@ app.post("/matches", async (req, res) => {
   res.status(201).json({ match, notified: notifiedUsers });
 });
 
+// --- Sunucu ---
 const port = Number(process.env.PORT ?? 3000);
 
 app.listen(port, () => {
