@@ -1,5 +1,5 @@
 import "dotenv/config";
-import express from "express";
+import express, { Request, Response, NextFunction } from "express";
 import { Pool } from "pg";
 
 const app = express();
@@ -105,9 +105,20 @@ app.post("/users", async (req, res) => {
     res.status(201).json(rows[0]);
 });
 
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  if (err.type === "entity.parse.failed") {
+    res.status(400).json({ error: "Geçersiz JSON" });
+    return;
+  }
+
+  console.error("Hata yakalandı:", err);
+  res.status(500).json({ error: "Sunucu hatası" });
+});
 
 // --- Sunucu ---
 const port = Number(process.env.PORT ?? 3000);
+
+
 
 app.listen(port, () => {
   console.log(`ilk11-api çalışıyor: http://localhost:${port}`);
